@@ -122,8 +122,8 @@ export default function PartnerPage() {
       partner_name:  currentUser.name,
       ref_code:      currentUser.ref_code,
       receipt_date:  new Date().toISOString().slice(0, 10),
-      settlement_status: "정산대기",
-      commission_amount: 0,
+      partner_settlement_status: "정산대기",
+      partner_commission_amount: 0,
     })
     if (error) { console.error(error); alert("고객 등록 실패"); return }
     alert("고객 등록 완료")
@@ -145,7 +145,7 @@ export default function PartnerPage() {
     const monthMatch = !selectedMonth || targetDate.startsWith(selectedMonth)
     return (
       monthMatch &&
-      (settlementFilter === "전체" || c.settlement_status === settlementFilter) &&
+      (settlementFilter === "전체" || c.partner_settlement_status === settlementFilter) &&
       (
         String(c.customer_name || "").toLowerCase().includes(keyword) ||
         String(c.phone         || "").replace(/-/g, "").includes(keyword)
@@ -159,14 +159,14 @@ export default function PartnerPage() {
   const kpiPending = customers
     .filter((c) =>
       c.status === "설치완료" &&
-      c.settlement_status !== "정산완료" &&
+      c.partner_settlement_status !== "정산완료" &&
       (!kpiMonth || (c.activation_date || "").startsWith(kpiMonth))
     )
     .reduce((sum, c) => sum + getCommission(c.product), 0)
 
   const kpiDone = customers
     .filter((c) =>
-      c.settlement_status === "정산완료" &&
+      c.partner_settlement_status === "정산완료" &&
       (!kpiMonth || (c.settlement_date || c.activation_date || "").startsWith(kpiMonth))
     )
     .reduce((sum, c) => sum + getCommission(c.product), 0)
@@ -376,13 +376,13 @@ export default function PartnerPage() {
                 { label: "개통일자", value: selectedCustomer.activation_date || "-" },
                 {
                   label: "정산금액",
-                  value: selectedCustomer.settlement_status === "정산완료"
-                    ? `${(selectedCustomer.commission_amount || getCommission(selectedCustomer.product)).toLocaleString()}원`
+                  value: selectedCustomer.partner_settlement_status === "정산완료"
+                    ? `${(selectedCustomer.partner_commission_amount || getCommission(selectedCustomer.product)).toLocaleString()}원`
                     : selectedCustomer.status === "설치완료"
                       ? `${getCommission(selectedCustomer.product).toLocaleString()}원 (예정)`
                       : "-",
                 },
-                { label: "정산상태", value: selectedCustomer.settlement_status || "정산대기" },
+                { label: "정산상태", value: selectedCustomer.partner_settlement_status || "정산대기" },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-zinc-50 rounded-2xl px-4 py-3">
                   <p className="text-xs text-zinc-400 mb-1">{label}</p>
