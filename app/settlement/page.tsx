@@ -304,9 +304,10 @@ export default function SettlementPage() {
   }
 
   function handleDownloadAll() {
-    const headers = ["고객명", "연락처", "통신사", "상품", "담당자", "파트너", "정산금액(원)", "정산상태", "개통일자", "정산처리일"]
+    const headers = ["고객명", "연락처", "은행", "예금주", "계좌번호", "담당자", "파트너", "정산금액(원)", "정산상태", "개통일자", "정산처리일"]
     const rows = filteredAll.map((app) => [
-      app.customer_name || "", app.phone || "", app.carrier || "", app.product || "",
+      app.customer_name || "", app.phone || "",
+      app.bank_name || "", app.account_holder || "", app.account_number || "",
       app.manager || "", app.partner_name || "",
       app.internal_settlement_amount || 0,
       app.internal_settlement_status || "정산대기",
@@ -558,7 +559,7 @@ export default function SettlementPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-zinc-50 text-zinc-500">
                       <tr>
-                        {["고객명", "연락처", "통신사", "상품", "정산금액 (직접입력)", "담당자", "파트너", "개통일자", "정산처리일", "정산상태", "처리"].map((h) => (
+                        {["고객명", "연락처", "은행", "예금주", "계좌번호", "정산금액 (직접입력)", "담당자", "파트너", "개통일자", "정산처리일", "정산상태", "처리"].map((h) => (
                           <th key={h} className="text-left p-4 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -576,8 +577,9 @@ export default function SettlementPage() {
                               </button>
                             </td>
                             <td className="p-4 whitespace-nowrap text-zinc-500">{app.phone || "-"}</td>
-                            <td className="p-4 whitespace-nowrap">{app.carrier || "-"}</td>
-                            <td className="p-4 whitespace-nowrap">{app.product || "-"}</td>
+                            <td className="p-4 whitespace-nowrap">{app.bank_name || "-"}</td>
+                            <td className="p-4 whitespace-nowrap">{app.account_holder || "-"}</td>
+                            <td className="p-4 whitespace-nowrap">{app.account_number || "-"}</td>
                             <td className="p-4 whitespace-nowrap">
                               <div className="flex items-center gap-1">
                                 <input
