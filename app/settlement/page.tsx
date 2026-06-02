@@ -262,7 +262,7 @@ export default function SettlementPage() {
       const p = partnerMap[app.ref_code] || {}
       return [
         app.customer_name || "", p.name || app.partner_name || "",
-        p.bank_name || "", p.account_holder || "", p.bank_account || "",
+        app.bank_name || "", app.account_holder || "", app.account_number || "",
         app.product || "", app.partner_commission_amount || getCommission(app.product),
         app.partner_settlement_status || "정산대기",
         app.activation_date || "", app.partner_settlement_date || "",
@@ -422,7 +422,7 @@ export default function SettlementPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-zinc-50 text-zinc-500">
                       <tr>
-                        {["고객명", "파트너", "은행 정보 (은행 / 예금주 / 계좌번호)", "상품", "정산금액", "개통일자", "정산처리일", "정산상태", "처리"].map((h) => (
+                        {["고객명", "파트너", "은행", "예금주", "계좌번호", "상품", "정산금액", "개통일자", "정산처리일", "정산상태", "처리"].map((h) => (
                           <th key={h} className="text-left p-4 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -441,13 +441,9 @@ export default function SettlementPage() {
                               </button>
                             </td>
                             <td className="p-4 whitespace-nowrap">{partner.name || app.partner_name || "-"}</td>
-                            <td className="p-4">
-                              <span className="text-zinc-700">{partner.bank_name || "-"}</span>
-                              <span className="text-zinc-300 mx-1.5">/</span>
-                              <span className="text-zinc-700">{partner.account_holder || "-"}</span>
-                              <span className="text-zinc-300 mx-1.5">/</span>
-                              <span className="font-medium text-zinc-900">{partner.bank_account || "-"}</span>
-                            </td>
+                            <td className="p-4 whitespace-nowrap">{app.bank_name || "-"}</td>
+                            <td className="p-4 whitespace-nowrap">{app.account_holder || "-"}</td>
+                            <td className="p-4 whitespace-nowrap">{app.account_number || "-"}</td>
                             <td className="p-4 whitespace-nowrap">{app.product || "-"}</td>
                             <td className="p-4 whitespace-nowrap font-semibold text-blue-600">
                               {(app.partner_commission_amount || getCommission(app.product)).toLocaleString()}원
