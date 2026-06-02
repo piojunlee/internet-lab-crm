@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase"
 const HIDDEN_STATUSES = ["청약완료", "설치완료", "해지안내완료", "보류요청", "취소"]
 const CARRIERS        = ["SK 브로드밴드", "KT", "LG U+", "헬로비전", "스카이라이프"]
 const PRODUCTS        = ["인터넷 단독", "인터넷+TV", "인터넷+TV+셋탑"]
-const DASHBOARD_STATUSES = ["상담신청", "상담접수중", "상담완료"]
+const DASHBOARD_STATUSES = ["상담신청", "상담접수중", "상담완료", "보류요청"]
 
 const STATUS_COLOR: Record<string, string> = {
   상담완료:    "bg-green-100 text-green-600",
@@ -25,6 +25,7 @@ const STATUS_SELECT_COLOR: Record<string, string> = {
   상담완료:   "bg-green-500/20 text-green-600 border-green-500/30",
   상담접수중: "bg-yellow-500/20 text-yellow-600 border-yellow-500/30",
   상담신청:   "bg-zinc-100 text-zinc-700 border-zinc-300",
+  보류요청:   "bg-orange-500/20 text-orange-600 border-orange-500/30",
 }
 
 const DEFAULT_NEW_CUSTOMER = {
@@ -107,9 +108,16 @@ export default function DashboardPage() {
   const [showCreateModal,  setShowCreateModal]  = useState(false)
   const [newCustomer,      setNewCustomer]      = useState(DEFAULT_NEW_CUSTOMER)
 
+  // 비밀번호 변경
+  const [showPwModal, setShowPwModal] = useState(false)
+  const [newPw,       setNewPw]       = useState("")
+  const [confirmPw,   setConfirmPw]   = useState("")
+  const [pwLoading,   setPwLoading]   = useState(false)
+
   const newCount      = customers.filter((c) => c.status === "상담신청").length
   const progressCount = customers.filter((c) => c.status === "상담접수중").length
   const completeCount = customers.filter((c) => c.status === "상담완료").length
+  const holdCount     = customers.filter((c) => c.status === "보류요청").length
 
   useEffect(() => { checkUser() }, [])
 
@@ -166,21 +174,36 @@ export default function DashboardPage() {
       .from("applications")
       .select("*")
       .order("created_at", { ascending: false })
-  
+
     if (
       userData?.role !== "admin" &&
       userData?.role !== "cs"
     ) {
       query = query.eq("manager_id", userData.id)
     }
-  
+
     const { data, error } = await query
-    if (error) {
-      console.error(error)
-      return
-    }
-  
+    if (error) { console.error(error); return }
     setCustomers(data || [])
+  }
+
+  // ── 비밀번호 변경 ──
+
+  async function changePassword() {
+    if (!newPw || !confirmPw) { alert("비밀번호를 입력해주세요."); return }
+    if (newPw !== confirmPw)   { alert("비밀번호가 일치하지 않습니다."); return }
+    if (newPw.length < 6)      { alert("비밀번호는 6자 이상이어야 합니다."); return }
+
+    setPwLoading(true)
+    const { error } = await supabase.auth.updateUser({ password: newPw })
+    setPwLoading(false)
+
+    if (error) { alert("변경 실패: " + error.message); return }
+
+    alert("비밀번호가 변경되었습니다.")
+    setShowPwModal(false)
+    setNewPw("")
+    setConfirmPw("")
   }
 
   // ── 저장 ──
@@ -310,20 +333,29 @@ export default function DashboardPage() {
             <h1 className="text-4xl font-bold mb-2">상담 업무 대시보드</h1>
             <p className="text-zinc-400">신규 접수 · 진행중 · 상담완료 고객 관리</p>
           </div>
-          <button
-            onClick={async () => { await supabase.auth.signOut(); router.push("/login") }}
-            className="bg-white border border-zinc-300 px-4 py-2 rounded-xl hover:bg-zinc-100 transition"
-          >
-            로그아웃
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowPwModal(true)}
+              className="bg-white border border-zinc-300 px-4 py-2 rounded-xl hover:bg-zinc-100 transition text-sm"
+            >
+              비밀번호 변경
+            </button>
+            <button
+              onClick={async () => { await supabase.auth.signOut(); router.push("/login") }}
+              className="bg-white border border-zinc-300 px-4 py-2 rounded-xl hover:bg-zinc-100 transition"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
 
         {/* 요약 카드 */}
-        <div className="grid grid-cols-3 gap-4 mb-10">
+        <div className="grid grid-cols-4 gap-4 mb-10">
           {[
             { label: "신규 고객", value: newCount,      color: "text-zinc-900" },
             { label: "진행중",    value: progressCount, color: "text-yellow-400" },
             { label: "상담완료",  value: completeCount, color: "text-green-400" },
+            { label: "보류",      value: holdCount,     color: "text-orange-400" },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-white border border-zinc-200 shadow-sm hover:shadow-md transition rounded-2xl p-6">
               <h2 className="text-lg font-semibold mb-2">{label}</h2>
@@ -353,6 +385,7 @@ export default function DashboardPage() {
                   { key: "상담신청",   count: newCount },
                   { key: "상담접수중", count: progressCount },
                   { key: "상담완료",   count: completeCount },
+                  { key: "보류요청",   count: holdCount },
                 ].map(({ key, count }) => (
                   <button
                     key={key}
@@ -411,8 +444,14 @@ export default function DashboardPage() {
 
       {/* 고객 상세 모달 */}
       {selectedCustomer && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white border border-zinc-200 shadow-xl rounded-3xl w-[640px] max-h-[90vh] overflow-y-auto p-8">
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setSelectedCustomer(null)}
+        >
+          <div
+            className="bg-white border border-zinc-200 shadow-xl rounded-3xl w-[640px] max-h-[90vh] overflow-y-auto p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
 
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-bold">고객 상세정보</h2>
@@ -423,7 +462,6 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-2 gap-6">
 
-              {/* 기본 정보 */}
               <div>
                 <p className={labelCls}>고객명</p>
                 <input type="text" value={selectedCustomer.customer_name || ""} onChange={(e) => updateSelected("customer_name", e.target.value)} className={inputCls} />
@@ -455,7 +493,6 @@ export default function DashboardPage() {
                 <input type="text" value={selectedCustomer.address || ""} onChange={(e) => updateSelected("address", e.target.value)} className={inputCls} />
               </div>
 
-              {/* 가입정보 */}
               <div className="col-span-2 grid grid-cols-3 gap-6">
                 <div>
                   <p className={labelCls}>통신사</p>
@@ -475,7 +512,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 계좌정보 */}
               <div className="col-span-2 grid grid-cols-3 gap-6">
                 <div>
                   <p className={labelCls}>예금주</p>
@@ -491,7 +527,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 일정정보 */}
               <div className="col-span-2 grid grid-cols-2 gap-6">
                 <div>
                   <p className={labelCls}>접수일자</p>
@@ -503,7 +538,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 추가 내용 */}
               <div className="col-span-2">
                 <p className={labelCls}>추가 내용</p>
                 <textarea
@@ -514,7 +548,6 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* 담당자 / 추천인 / 상태 */}
               <div className="col-span-2 grid grid-cols-3 gap-6">
                 <div>
                   <p className={labelCls}>담당자</p>
@@ -558,14 +591,12 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 수정 완료 */}
               <div className="col-span-2 flex justify-end">
                 <button onClick={saveMemo} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700 transition">
                   수정 완료
                 </button>
               </div>
 
-              {/* 상담 히스토리 */}
               <div className="col-span-2">
                 <p className={labelCls}>상담 히스토리</p>
                 <div className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 whitespace-pre-line text-sm leading-5 text-zinc-700 max-h-24 overflow-y-auto">
@@ -573,7 +604,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* 상담 메모 입력 */}
               <div className="col-span-2">
                 <p className={labelCls}>상담 메모</p>
                 <textarea
@@ -597,8 +627,14 @@ export default function DashboardPage() {
 
       {/* 신규 고객 생성 모달 */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl w-[520px] p-8">
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setShowCreateModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-[520px] p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">고객 등록</h2>
               <button onClick={() => setShowCreateModal(false)} className="text-zinc-500 hover:text-zinc-900 transition">
@@ -636,6 +672,59 @@ export default function DashboardPage() {
               </select>
               <button onClick={createCustomer} className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition">
                 고객 생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 비밀번호 변경 모달 */}
+      {showPwModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => { setShowPwModal(false); setNewPw(""); setConfirmPw("") }}
+        >
+          <div
+            className="bg-white rounded-3xl w-[400px] p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">비밀번호 변경</h2>
+              <button onClick={() => { setShowPwModal(false); setNewPw(""); setConfirmPw("") }}
+                className="text-zinc-500 hover:text-zinc-900 transition">
+                닫기
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className={labelCls}>새 비밀번호</p>
+                <input
+                  type="password"
+                  placeholder="6자 이상 입력"
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <p className={labelCls}>새 비밀번호 확인</p>
+                <input
+                  type="password"
+                  placeholder="비밀번호 재입력"
+                  value={confirmPw}
+                  onChange={(e) => setConfirmPw(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              {newPw && confirmPw && newPw !== confirmPw && (
+                <p className="text-red-500 text-sm">비밀번호가 일치하지 않습니다.</p>
+              )}
+              <button
+                onClick={changePassword}
+                disabled={pwLoading}
+                className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {pwLoading ? "변경 중..." : "변경하기"}
               </button>
             </div>
           </div>

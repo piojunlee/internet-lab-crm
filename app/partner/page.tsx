@@ -10,7 +10,7 @@ const PRODUCTS = ["인터넷 단독", "인터넷+TV",]
 // 상품별 정산금액
 function getCommission(product: string): number {
   if (product === "인터넷 단독") return 30000
-  return 50000  // 인터넷+TV
+  return 50000  // 인터넷+TV, 인터넷+TV+셋탑
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -60,8 +60,20 @@ export default function PartnerPage() {
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [kpiMonth,      setKpiMonth]      = useState(() => new Date().toISOString().slice(0, 7))
   const [showBankInfo,  setShowBankInfo]  = useState(false)
+  const [showFabTooltip, setShowFabTooltip] = useState(false)
 
-  useEffect(() => { checkUser() }, [])
+  // 비밀번호 변경
+  const [showPwModal, setShowPwModal] = useState(false)
+  const [newPw,       setNewPw]       = useState("")
+  const [confirmPw,   setConfirmPw]   = useState("")
+  const [pwLoading,   setPwLoading]   = useState(false)
+
+  useEffect(() => {
+    checkUser()
+    setShowFabTooltip(true)
+    const timer = setTimeout(() => setShowFabTooltip(false), 3000)
+    return () => clearTimeout(timer)
+  }, [])
 
   async function checkUser() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -79,6 +91,23 @@ export default function PartnerPage() {
 
     setCurrentUser(userData)
     fetchCustomers(userData.ref_code)
+  }
+
+  async function changePassword() {
+    if (!newPw || !confirmPw) { alert("비밀번호를 입력해주세요."); return }
+    if (newPw !== confirmPw)   { alert("비밀번호가 일치하지 않습니다."); return }
+    if (newPw.length < 6)      { alert("비밀번호는 6자 이상이어야 합니다."); return }
+
+    setPwLoading(true)
+    const { error } = await supabase.auth.updateUser({ password: newPw })
+    setPwLoading(false)
+
+    if (error) { alert("변경 실패: " + error.message); return }
+
+    alert("비밀번호가 변경되었습니다.")
+    setShowPwModal(false)
+    setNewPw("")
+    setConfirmPw("")
   }
 
   async function createCustomer() {
@@ -112,7 +141,7 @@ export default function PartnerPage() {
 
   const filteredCustomers = customers.filter((c) => {
     const keyword    = search.toLowerCase()
-    const targetDate = c[dateType] || ""
+    const targetDate = c[dateType] || c.created_at?.slice(0, 10) || ""
     const monthMatch = !selectedMonth || targetDate.startsWith(selectedMonth)
     return (
       monthMatch &&
@@ -127,7 +156,6 @@ export default function PartnerPage() {
   const receiptCount  = customers.length
   const installCount  = customers.filter((c) => c.status === "설치완료").length
 
-  // KPI 월별 집계
   const kpiPending = customers
     .filter((c) =>
       c.status === "설치완료" &&
@@ -151,9 +179,9 @@ export default function PartnerPage() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl text-blue-600 font-bold">PARTNER</h1>
           <div className="flex gap-2">
-            <button onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold active:opacity-80">
-              고객등록
+            <button onClick={() => setShowPwModal(true)}
+              className="bg-white border border-zinc-300 text-zinc-700 px-4 py-2.5 rounded-xl text-sm active:opacity-80">
+              비밀번호
             </button>
             <button onClick={async () => { await supabase.auth.signOut(); router.push("/login") }}
               className="bg-zinc-800 text-white px-4 py-2.5 rounded-xl text-sm active:opacity-80">
@@ -307,6 +335,26 @@ export default function PartnerPage() {
 
       </div>
 
+      {/* 플로팅 고객 등록 버튼 */}
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+        {showFabTooltip && (
+          <div className="relative bg-zinc-800 text-white text-sm px-3 py-2 rounded-xl shadow-lg whitespace-nowrap animate-fade-in">
+            고객 등록
+            {/* 말풍선 꼬리 */}
+            <span className="absolute -bottom-1.5 right-5 w-3 h-3 bg-zinc-800 rotate-45" />
+          </div>
+        )}
+        <button
+          onClick={() => {
+            setShowFabTooltip(false)
+            setShowCreateModal(true)
+          }}
+          className="bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg text-2xl flex items-center justify-center active:opacity-80"
+        >
+          +
+        </button>
+      </div>
+
       {/* 고객 상세 바텀시트 */}
       {selectedCustomer && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
@@ -400,6 +448,49 @@ export default function PartnerPage() {
           </div>
         </div>
       )}
+
+      {/* 비밀번호 변경 모달 */}
+      {showPwModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/50"
+            onClick={() => { setShowPwModal(false); setNewPw(""); setConfirmPw("") }} />
+          <div className="relative w-full max-w-2xl bg-white rounded-t-3xl px-6 pt-5 pb-10 shadow-xl">
+            <div className="w-10 h-1 bg-zinc-300 rounded-full mx-auto mb-5" />
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-lg font-bold">비밀번호 변경</h2>
+              <button onClick={() => { setShowPwModal(false); setNewPw(""); setConfirmPw("") }}
+                className="text-zinc-400 text-sm">닫기</button>
+            </div>
+            <div className="space-y-3">
+              <input
+                type="password"
+                placeholder="새 비밀번호 (6자 이상)"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                className={inputCls}
+              />
+              <input
+                type="password"
+                placeholder="새 비밀번호 확인"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                className={inputCls}
+              />
+              {newPw && confirmPw && newPw !== confirmPw && (
+                <p className="text-red-500 text-sm px-1">비밀번호가 일치하지 않습니다.</p>
+              )}
+              <button
+                onClick={changePassword}
+                disabled={pwLoading}
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl text-base font-semibold active:opacity-80 disabled:opacity-50"
+              >
+                {pwLoading ? "변경 중..." : "변경하기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   )
 }

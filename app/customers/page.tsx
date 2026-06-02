@@ -7,10 +7,10 @@ import { supabase } from "@/lib/supabase"
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
 const HIDDEN_STATUSES          = ["청약완료", "설치완료", "해지안내완료", "보류요청", "취소"]
-const CUSTOMER_MANAGE_STATUSES = ["상담완료", "청약완료", "설치완료", "해지안내완료", "보류요청", "취소"]
+const CUSTOMER_MANAGE_STATUSES = ["상담완료", "접수중", "청약완료", "설치완료", "해지안내완료", "보류요청", "취소"]
 const CARRIERS     = ["SK 브로드밴드", "KT", "LG U+", "헬로비전", "스카이라이프"]
 const PRODUCTS     = ["인터넷 단독", "인터넷+TV", "인터넷+TV+셋탑"]
-const STATUSES     = ["상담신청", "상담접수중", "상담완료", "청약완료", "설치완료", "해지안내완료", "보류요청", "취소"]
+const STATUSES     = ["상담신청", "상담접수중", "상담완료", "접수중", "청약완료", "설치완료", "해지안내완료", "보류요청", "취소"]
 const PERIOD_OPTIONS = ["전체", "오늘", "어제", "이번달", "지난달"]
 
 // 로그 남길 필드 목록 (field key → 표시 이름)
@@ -38,6 +38,7 @@ const DEFAULT_NEW_CUSTOMER = {
 
 const STATUS_COLOR: Record<string, string> = {
   상담완료:    "bg-yellow-100 text-yellow-700",
+  접수중:  "bg-indigo-100 text-indigo-600",
   설치완료:    "bg-green-100 text-green-600",
   청약완료:    "bg-blue-100 text-blue-600",
   상담접수중:  "bg-yellow-100 text-yellow-700",
@@ -49,6 +50,7 @@ const STATUS_COLOR: Record<string, string> = {
 const STATUS_SELECT_COLOR: Record<string, string> = {
   설치완료:   "bg-green-500/20 text-green-400 border-green-500/30",
   청약완료:   "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  접수중: "bg-indigo-500/20 text-indigo-500 border-indigo-500/30",
   상담접수중: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
   취소:       "bg-red-500/20 text-red-400 border-red-500/30",
 }
@@ -100,7 +102,7 @@ export default function CustomerManagePage() {
   const [managers,         setManagers]         = useState<any[]>([])
   const [loading,          setLoading]          = useState(true)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
-  const [originalCustomer, setOriginalCustomer] = useState<any>(null)   // 원본 스냅샷
+  const [originalCustomer, setOriginalCustomer] = useState<any>(null)
   const [newMemo,          setNewMemo]          = useState("")
   const [showCreateModal,  setShowCreateModal]  = useState(false)
   const [newCustomer,      setNewCustomer]      = useState(DEFAULT_NEW_CUSTOMER)
@@ -117,8 +119,6 @@ export default function CustomerManagePage() {
 
   useEffect(() => { checkUser() }, [])
 
-  // ── 인증 ──
-
   async function checkUser() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push("/login"); return }
@@ -129,23 +129,21 @@ export default function CustomerManagePage() {
     if (!userData?.is_active) { router.push("/login"); return }
 
     if (userData.role === "partner") {
-        alert("잘못된 접근입니다.")
-        router.replace("/partner")
-        return
-      }
+      alert("잘못된 접근입니다.")
+      router.replace("/partner")
+      return
+    }
 
-      if (!["admin", "manager", "cs"].includes(userData.role)) {
-        router.replace("/login")
-        return
-      }
+    if (!["admin", "manager", "cs"].includes(userData.role)) {
+      router.replace("/login")
+      return
+    }
 
     setCurrentUser(userData)
     await fetchManagers()
     await fetchCustomers(userData)
     setLoading(false)
   }
-
-  // ── 데이터 fetching ──
 
   async function fetchManagers() {
     const { data, error } = await supabase
@@ -157,25 +155,18 @@ export default function CustomerManagePage() {
   async function fetchCustomers(userData?: any) {
     let query = supabase
       .from("applications").select("*").order("created_at", { ascending: false })
-      if (
-        userData?.role !== "admin" &&
-        userData?.role !== "cs"
-      ) {
-        query = query.eq("manager_id", userData.id)
-      }
+    if (userData?.role !== "admin" && userData?.role !== "cs") {
+      query = query.eq("manager_id", userData.id)
+    }
     const { data, error } = await query
     if (error) { console.error(error); return }
     setCustomers(data || [])
   }
 
-  // ── 고객 선택 (원본 스냅샷 저장) ──
-
   function openCustomer(customer: any) {
-    setSelectedCustomer({ ...customer })   // 독립 복사본
-    setOriginalCustomer({ ...customer })   // 독립 복사본 (참조 분리)
+    setSelectedCustomer({ ...customer })
+    setOriginalCustomer({ ...customer })
   }
-
-  // ── 저장 ──
 
   async function createCustomer() {
     const { error } = await supabase.from("applications").insert({
@@ -226,14 +217,9 @@ export default function CustomerManagePage() {
 
     if (error) { console.error(error); return }
 
-    // ── 변경된 필드 로그 기록 ──
     if (originalCustomer) {
       const logs = Object.entries(LOG_FIELDS)
-        .filter(([field]) => {
-          const oldVal = originalCustomer[field] ?? ""
-          const newVal = selectedCustomer[field]  ?? ""
-          return String(oldVal) !== String(newVal)
-        })
+        .filter(([field]) => String(originalCustomer[field] ?? "") !== String(selectedCustomer[field] ?? ""))
         .map(([field, label]) => ({
           application_id: selectedCustomer.id,
           customer_name:  selectedCustomer.customer_name,
@@ -252,7 +238,7 @@ export default function CustomerManagePage() {
 
     fetchCustomers(currentUser)
     alert("수정 완료")
-    setOriginalCustomer({ ...selectedCustomer })  // 저장 후 원본 갱신 (독립 복사본)
+    setOriginalCustomer({ ...selectedCustomer })
   }
 
   async function addMemoHistory() {
@@ -265,7 +251,6 @@ export default function CustomerManagePage() {
       .from("applications").update({ memo_history: newHistory }).eq("id", selectedCustomer.id)
     if (error) { console.error(error); return }
 
-    // 상담 메모 로그
     await supabase.from("activity_logs").insert({
       application_id: selectedCustomer.id,
       customer_name:  selectedCustomer.customer_name,
@@ -280,8 +265,6 @@ export default function CustomerManagePage() {
     setNewMemo("")
     fetchCustomers(currentUser)
   }
-
-  // ── 헬퍼 ──
 
   function updateSelected(field: string, value: string) {
     setSelectedCustomer((prev: any) => ({ ...prev, [field]: value }))
@@ -327,11 +310,7 @@ export default function CustomerManagePage() {
     )
   })
 
-  // ─── JSX ─────────────────────────────────────────────────────────────────
-
-  if (loading) {
-    return null
-  }
+  if (loading) return null
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 flex">
@@ -387,11 +366,12 @@ export default function CustomerManagePage() {
         </div>
 
         {/* 현황판 */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-4 gap-4 mb-6">
           {[
-            { label: "상담완료", value: customers.filter((c) => c.status === "상담완료").length, color: "text-yellow-500" },
-            { label: "청약완료", value: customers.filter((c) => c.status === "청약완료").length, color: "text-blue-500" },
-            { label: "설치완료", value: customers.filter((c) => c.status === "설치완료").length, color: "text-green-500" },
+            { label: "상담완료",  value: customers.filter((c) => c.status === "상담완료").length,  color: "text-yellow-500" },
+            { label: "접수중", value: customers.filter((c) => c.status === "접수중").length, color: "text-indigo-500" },
+            { label: "청약완료",  value: customers.filter((c) => c.status === "청약완료").length,  color: "text-blue-500" },
+            { label: "설치완료",  value: customers.filter((c) => c.status === "설치완료").length,  color: "text-green-500" },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-white border border-zinc-200 shadow-sm hover:shadow-md transition rounded-2xl p-6">
               <h2 className="text-lg font-semibold mb-2 text-zinc-700">{label}</h2>
@@ -416,10 +396,11 @@ export default function CustomerManagePage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex gap-2">
                 {[
-                  { key: "전체",    count: customers.filter((c) => CUSTOMER_MANAGE_STATUSES.includes(c.status)).length },
-                  { key: "상담완료", count: customers.filter((c) => c.status === "상담완료").length },
-                  { key: "청약완료", count: customers.filter((c) => c.status === "청약완료").length },
-                  { key: "설치완료", count: customers.filter((c) => c.status === "설치완료").length },
+                  { key: "전체",     count: customers.filter((c) => CUSTOMER_MANAGE_STATUSES.includes(c.status)).length },
+                  { key: "상담완료",  count: customers.filter((c) => c.status === "상담완료").length },
+                  { key: "접수중", count: customers.filter((c) => c.status === "접수중").length },
+                  { key: "청약완료",  count: customers.filter((c) => c.status === "청약완료").length },
+                  { key: "설치완료",  count: customers.filter((c) => c.status === "설치완료").length },
                 ].map(({ key, count }) => (
                   <button key={key} onClick={() => setStatusFilter(key)}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
@@ -510,8 +491,10 @@ export default function CustomerManagePage() {
 
       {/* 고객 상세 모달 */}
       {selectedCustomer && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white border border-zinc-200 shadow-xl rounded-3xl w-[640px] max-h-[90vh] overflow-y-auto p-8">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => { setSelectedCustomer(null); setOriginalCustomer(null) }}>
+          <div className="bg-white border border-zinc-200 shadow-xl rounded-3xl w-[640px] max-h-[90vh] overflow-y-auto p-8"
+            onClick={(e) => e.stopPropagation()}>
 
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-bold">고객 상세정보</h2>
@@ -643,7 +626,6 @@ export default function CustomerManagePage() {
                 </button>
               </div>
 
-              {/* 상담 히스토리 */}
               <div className="col-span-2">
                 <p className={labelCls}>상담 히스토리</p>
                 <div className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 whitespace-pre-line text-sm leading-5 text-zinc-700 max-h-24 overflow-y-auto">
@@ -651,7 +633,6 @@ export default function CustomerManagePage() {
                 </div>
               </div>
 
-              {/* 상담 메모 */}
               <div className="col-span-2">
                 <p className={labelCls}>상담 메모</p>
                 <textarea value={newMemo} onChange={(e) => setNewMemo(e.target.value)}
@@ -672,8 +653,10 @@ export default function CustomerManagePage() {
 
       {/* 신규 고객 생성 모달 */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl w-[520px] p-8">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setShowCreateModal(false)}>
+          <div className="bg-white rounded-3xl w-[520px] p-8"
+            onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold">고객 등록</h2>
               <button onClick={() => setShowCreateModal(false)} className="text-zinc-500 hover:text-zinc-900 transition">
